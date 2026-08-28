@@ -169,6 +169,12 @@ type ActiveRun = {
  *
  * `Agent` owns the current transcript, emits lifecycle events, executes tools,
  * and exposes queueing APIs for steering and follow-up messages.
+ *
+ * 中文说明：Agent 是 agent core 的核心引擎（与具体 Provider 无关）。它维护：
+ * - state：当前会话状态（systemPrompt/model/thinkingLevel/tools/messages/isStreaming 等）
+ * - steeringQueue/followUpQueue：运行中插入的排队消息
+ * - subscribe：生命周期事件订阅（message_start/update/end、tool_execution、turn、agent_end）
+ * AgentSession（coding-agent 层）在其上叠加持久化/压缩/扩展等会话级能力。
  */
 export class Agent {
 	private _state: MutableAgentState;
@@ -280,11 +286,13 @@ export class Agent {
 	}
 
 	/** Queue a message to be injected after the current assistant turn finishes. */
+	// steer：运行中插入消息 —— 在当前轮工具执行完后、下一次 LLM 调用前注入。
 	steer(message: AgentMessage): void {
 		this.steeringQueue.enqueue(message);
 	}
 
 	/** Queue a message to run only after the agent would otherwise stop. */
+	// followUp：运行中插入消息 —— 等 Agent 本来要停下来时才作为新提示继续跑。
 	followUp(message: AgentMessage): void {
 		this.followUpQueue.enqueue(message);
 	}
@@ -345,6 +353,8 @@ export class Agent {
 	}
 
 	/** Start a new prompt from text, a single message, or a batch of messages. */
+	// prompt：唯一的新运行入口（同一时刻只允许一个 activeRun，重复调用会报错）。
+	// TS 语法：同名的多个声明是“重载签名”，最后带实现体的才是真实实现。
 	async prompt(message: AgentMessage | AgentMessage[]): Promise<void>;
 	async prompt(input: string, images?: ImageContent[]): Promise<void>;
 	async prompt(input: string | AgentMessage | AgentMessage[], images?: ImageContent[]): Promise<void> {
@@ -406,6 +416,8 @@ export class Agent {
 		return [{ role: "user", content, timestamp: Date.now() }];
 	}
 
+	// 把所有待发消息交给 runAgentLoop（真正的主循环，见 agent-loop.ts），
+	// 并套上生命周期管理（abort 信号、事件监听、状态清理）。
 	private async runPromptMessages(
 		messages: AgentMessage[],
 		options: { skipInitialSteeringPoll?: boolean } = {},
@@ -434,6 +446,8 @@ export class Agent {
 		});
 	}
 
+	// 生成循环所需的“上下文快照”：systemPrompt + 消息副本 + 工具列表副本。
+	// （slice() 是浅拷贝，防止循环内部改动影响到 this._state 的数组。）
 	private createContextSnapshot(): AgentContext {
 		return {
 			systemPrompt: this._state.systemPrompt,
@@ -442,6 +456,8 @@ export class Agent {
 		};
 	}
 
+	// 组装循环配置：把状态里的模型/思考级别、各扩展钩子、以及两个排队消息的
+	// 取用函数（getSteeringMessages/getFollowUpMessages）打包传给 agent-loop。
 	private createLoopConfig(options: { skipInitialSteeringPoll?: boolean } = {}): AgentLoopConfig {
 		let skipInitialSteeringPoll = options.skipInitialSteeringPoll === true;
 		const shouldStopAfterTurn = this.shouldStopAfterTurn;
@@ -483,6 +499,8 @@ export class Agent {
 		};
 	}
 
+	// 生命周期包装：创建 AbortController（用于用户中断）、标记 isStreaming、
+	// 出错时合成一条 error/aborted 的 assistant 消息，finally 里清理运行状态。
 	private async runWithLifecycle(executor: (signal: AbortSignal) => Promise<void>): Promise<void> {
 		if (this.activeRun) {
 			throw new Error("Agent is already processing.");
@@ -540,6 +558,9 @@ export class Agent {
 	 * `agent_end` only means no further loop events will be emitted. The run is
 	 * considered idle later, after all awaited listeners for `agent_end` finish
 	 * and `finishRun()` clears runtime-owned state.
+	 *
+	 * 中文说明：事件处理中心。先把事件“归约”到 state（如 message_end 时把消息
+	 * 追加进 transcript），再按订阅顺序通知所有监听者（SessionExtension/UI 等）。
 	 */
 	private async processEvents(event: AgentEvent): Promise<void> {
 		switch (event.type) {
@@ -552,6 +573,7 @@ export class Agent {
 				break;
 
 			case "message_end":
+				// 消息完成：结束流式标记，并把完整消息写入 transcript。
 				this._state.streamingMessage = undefined;
 				this._state.messages.push(event.message);
 				break;

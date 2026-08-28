@@ -77,6 +77,8 @@ const EXTENSION_LOAD_FAILURE_HINT = `Hint: Start without extensions using "${APP
  */
 async function readPipedStdin(): Promise<string | undefined> {
 	// If stdin is a TTY, we're running interactively - don't read stdin
+	// 中文说明：读取通过管道（|）传入的内容，例如 `echo hi | pi -p`。
+	// 如果 stdin 是终端（TTY）说明是交互式运行，没有管道输入，返回 undefined。
 	if (process.stdin.isTTY) {
 		return undefined;
 	}
@@ -107,6 +109,10 @@ function isTruthyEnvFlag(value: string | undefined): boolean {
 	return value === "1" || value.toLowerCase() === "true" || value.toLowerCase() === "yes";
 }
 
+// 决定运行模式（AppMode）：
+// - 显式 --mode rpc / --mode json
+// - -p/--print，或 stdin/stdout 任一不是终端 → print（单次执行后退出）
+// - 否则 → interactive（TUI 交互模式）
 function resolveAppMode(parsed: Args, stdinIsTTY: boolean, stdoutIsTTY: boolean): AppMode {
 	if (parsed.mode === "rpc") {
 		return "rpc";
@@ -206,6 +212,10 @@ async function runAuthCommand(args: string[]): Promise<boolean> {
 	return true;
 }
 
+// 组装“初始 prompt”：
+// - 命令行上的 @file 参数先由 processFileArguments 读成文本/图片
+// - 再连同 stdin 内容一起交给 buildInitialMessage 合并成一条消息
+// 这是“prompt 组织”环节的入口（详见 cli/initial-message.ts）。
 async function prepareInitialMessage(
 	parsed: Args,
 	autoResizeImages: boolean,
@@ -349,6 +359,9 @@ function forkSessionOrExit(sourcePath: string, cwd: string, sessionDir?: string,
 	}
 }
 
+// 根据命令行参数决定使用哪个会话（SessionManager 管理会话的 JSONL 文件）。
+// 优先级：--no-session（内存会话）→ --fork（从已有会话分叉）→ --session（打开指定会话）
+// → --resume（弹出选择器）→ --continue（继续最近会话）→ 新建会话。
 export async function createSessionManager(
 	parsed: Args,
 	cwd: string,
@@ -442,6 +455,10 @@ export async function createSessionManager(
 	return SessionManager.create(cwd, sessionDir, { id: parsed.sessionId });
 }
 
+// 把 CLI 参数映射成 createAgentSession 的选项（模型、thinkingLevel、工具开关）：
+// - --model/--provider 直接指定模型；未指定时回退到 --models 范围或设置里的默认模型
+// - thinking 级别的优先级：显式 --thinking > --model 里携带的 > 范围/设置默认值
+// - 工具方面支持 --no-tools/--tools/--exclude-tools 白名单/黑名单组合
 function buildSessionOptions(
 	parsed: Args,
 	scopedModels: ScopedModel[],
@@ -558,15 +575,23 @@ export interface MainOptions {
 	extensionFactories?: InlineExtension[];
 }
 
+// ============================================================
+// main()：CLI 总编排。链路：解析参数 → 判定模式 → 准备会话 → 创建运行时服务与
+// AgentSession → 组装初始 prompt → 分发到 interactive/print/rpc 三种模式。
+// ============================================================
 export async function main(args: string[], options?: MainOptions) {
+	// 重置启动计时器；合并内置扩展与 SDK 调用方传入的扩展工厂。
+	// （time() 用于统计各阶段耗时，仅诊断用。）
 	resetTimings();
 	const extensionFactories = [...builtInExtensions, ...(options?.extensionFactories ?? [])];
+	// --offline 或 PI_OFFLINE=1：离线模式，跳过版本检查等一切非必要网络请求。
 	const offlineMode = args.includes("--offline") || isTruthyEnvFlag(process.env.PI_OFFLINE);
 	if (offlineMode) {
 		process.env.PI_OFFLINE = "1";
 		process.env.PI_SKIP_VERSION_CHECK = "1";
 	}
 
+	// `pi auth ...` 子命令（登录/查看凭据等）在此短路处理，处理完直接返回。
 	if (await runAuthCommand(args)) {
 		return;
 	}
@@ -576,12 +601,14 @@ export async function main(args: string[], options?: MainOptions) {
 	}
 	cleanupManagedInstall();
 
+	// 启动期引导：先以“项目未受信”状态加载全局设置，应用代理并配置 HTTP 调度器。
 	const cwd = process.cwd();
 	const agentDir = getAgentDir();
 	const bootstrapSettingsManager = SettingsManager.create(cwd, agentDir, { projectTrusted: false });
 	applyHttpProxySettings(bootstrapSettingsManager.getGlobalSettings().httpProxy);
 	configureHttpDispatcher();
 
+	// `pi package ...` / `pi config ...` 子命令在此短路处理。
 	if (await handlePackageCommand(args, { extensionFactories })) {
 		const exitCode = process.exitCode ?? 0;
 		if (process.platform === "win32" && exitCode === 0 && args[0] === "update") {
@@ -599,6 +626,8 @@ export async function main(args: string[], options?: MainOptions) {
 		return;
 	}
 
+	// 核心一步：把原始 argv 解析成结构化的 Args（详见 cli/args.ts）。
+	// 解析过程中产生的 diagnostics（错误/警告）直接打印，有错误就退出。
 	const parsed = parseArgs(args);
 	if (parsed.diagnostics.length > 0) {
 		for (const d of parsed.diagnostics) {
@@ -611,6 +640,7 @@ export async function main(args: string[], options?: MainOptions) {
 	}
 	time("parseArgs");
 
+	// --version / --export 等元命令在此短路处理。
 	if (parsed.version) {
 		console.log(VERSION);
 		process.exit(0);
@@ -630,6 +660,7 @@ export async function main(args: string[], options?: MainOptions) {
 		process.exit(0);
 	}
 
+	// 确定最终运行模式；非交互模式会接管 stdout（防止扩展等杂散输出破坏输出格式）。
 	let appMode = resolveAppMode(parsed, process.stdin.isTTY, process.stdout.isTTY);
 	const shouldTakeOverStdout = appMode !== "interactive" && !isPlainRuntimeMetadataCommand(parsed);
 	if (shouldTakeOverStdout) {
@@ -641,9 +672,11 @@ export async function main(args: string[], options?: MainOptions) {
 		process.exit(1);
 	}
 
+	// 校验互斥的会话 flag（如 --fork 不能与 --session/--continue 同用）。
 	validateForkFlags(parsed);
 	validateSessionIdFlags(parsed);
 
+	// 迁移旧版本本地数据（如 auth 存储格式），并收集弃用警告。
 	// Run migrations (pass cwd for project-local migrations)
 	const { migratedAuthProviders: migratedProviders, deprecationWarnings } = runMigrations(cwd);
 	time("runMigrations");
@@ -653,6 +686,7 @@ export async function main(args: string[], options?: MainOptions) {
 
 	// Experimental first-time setup: theme choice and analytics opt-in.
 	// Runs before any runtime services are created so the chosen settings apply everywhere.
+	// 首次运行的引导设置（主题选择、分析开关）；先于运行时服务创建，使设置全局生效。
 	if (appMode === "interactive" && !parsed.help && parsed.listModels === undefined && shouldRunFirstTimeSetup()) {
 		await showFirstTimeSetup(startupSettingsManager);
 		time("firstTimeSetup");
@@ -662,6 +696,9 @@ export async function main(args: string[], options?: MainOptions) {
 		startupSettingsManager.applyOverrides({ theme: parsed.useTheme });
 	}
 
+	// 决定会话目录，并创建会话管理器（详见 createSessionManager）。
+	// 注意：--session/--resume 可能选中其他项目里的会话，所以“最终 cwd”要等这一步之后才确定，
+	// 项目级设置/扩展/模型都必须等 cwd 确定后再解析。
 	// Decide the final runtime cwd before creating cwd-bound runtime services.
 	// --session and --resume may select a session from another project, so project-local
 	// settings, resources, provider registrations, and models must be resolved only after
@@ -696,6 +733,7 @@ export async function main(args: string[], options?: MainOptions) {
 	}
 	time("createSessionManager");
 
+	// 项目信任（ProjectTrust）：决定是否信任并加载该项目内的扩展等资源（安全机制，防恶意项目配置）。
 	const trustStore = new ProjectTrustStore(agentDir);
 	const sessionCwd = sessionManager.getCwd();
 	const autoTrustOnReloadCwd =
@@ -705,10 +743,13 @@ export async function main(args: string[], options?: MainOptions) {
 	const trustPromptMode: AppMode = parsed.help || parsed.listModels !== undefined ? "print" : appMode;
 	const projectTrustByCwd = new Map<string, boolean>();
 
+	// 把 CLI 传入的扩展/技能/模板/主题路径统一转为绝对路径（避免 cwd 变化后语义漂移）。
 	const resolvedExtensionPaths = resolveCliPaths(cwd, parsed.extensions);
 	const resolvedSkillPaths = resolveCliPaths(cwd, parsed.skills);
 	const resolvedPromptTemplatePaths = resolveCliPaths(cwd, parsed.promptTemplates);
 	const resolvedThemePaths = resolveCliPaths(cwd, parsed.themes);
+	// createRuntime 是一个“工厂闭包”：给定 cwd 等输入，创建一整套运行时服务 + AgentSession。
+	// 之所以做成工厂，是因为切换会话/项目目录时需要按新 cwd 重建整套服务。
 	const createRuntime: CreateAgentSessionRuntimeFactory = async ({
 		cwd,
 		agentDir,
@@ -716,6 +757,7 @@ export async function main(args: string[], options?: MainOptions) {
 		sessionStartEvent,
 		projectTrustContext,
 	}) => {
+		// 每次构建运行时：先判定项目信任状态，再据此加载项目级设置与资源（扩展/技能/模板）。
 		const isInitialRuntime = sessionStartEvent === undefined;
 		const projectTrustDiagnostics: AgentSessionRuntimeDiagnostic[] = [];
 		const cachedProjectTrust = projectTrustByCwd.get(cwd);
@@ -784,11 +826,13 @@ export async function main(args: string[], options?: MainOptions) {
 			})),
 		];
 
+		// 解析 --models 得到“模型范围”（scopedModels，交互模式下 Ctrl+P 可循环切换的模型列表）。
 		const modelPatterns = parsed.models ?? settingsManager.getEnabledModels();
 		const scopedModels =
 			modelPatterns && modelPatterns.length > 0
 				? await resolveModelScope(modelPatterns, modelRuntime, { signal: AbortSignal.timeout(15_000) })
 				: [];
+		// 把 CLI 参数映射为会话选项（模型、thinkingLevel、工具白/黑名单），见 buildSessionOptions。
 		const {
 			options: sessionOptions,
 			cliThinkingFromModel,
@@ -802,6 +846,7 @@ export async function main(args: string[], options?: MainOptions) {
 		);
 		diagnostics.push(...sessionOptionDiagnostics);
 
+		// --api-key 作为运行时凭据注入指定 provider（只存在内存，不写入磁盘）。
 		if (parsed.apiKey) {
 			if (!sessionOptions.model) {
 				diagnostics.push({
@@ -813,6 +858,7 @@ export async function main(args: string[], options?: MainOptions) {
 			}
 		}
 
+		// 服务（settings/modelRuntime/resourceLoader）就绪后，正式创建 AgentSession。
 		const created = await createAgentSessionFromServices({
 			services,
 			sessionManager,
@@ -837,6 +883,7 @@ export async function main(args: string[], options?: MainOptions) {
 		};
 	};
 	time("createRuntime");
+	// 调用工厂创建运行时（内部执行上面的 createRuntime 闭包），得到 services + session。
 	const runtime = await createAgentSessionRuntime(createRuntime, {
 		cwd: sessionManager.getCwd(),
 		agentDir,
@@ -845,10 +892,12 @@ export async function main(args: string[], options?: MainOptions) {
 	time("createAgentSessionRuntime");
 	const { services, session, modelFallbackMessage } = runtime;
 	const { settingsManager, modelRuntime, resourceLoader } = services;
+	// 用最终加载的设置应用：终端能力覆盖、HTTP 代理、HTTP 空闲超时。
 	setCapabilityOverrides(settingsManager.getTerminalCapabilityOverrides());
 	applyHttpProxySettings(settingsManager.getGlobalSettings().httpProxy);
 	configureHttpDispatcher(settingsManager.getHttpIdleTimeoutMs());
 
+	// --help / --list-models 元命令短路（此时运行时已就绪，可列出扩展注册的 flag）。
 	if (parsed.help) {
 		reportDiagnostics(startupSettingsDiagnostics);
 		const extensionFlags = resourceLoader
@@ -865,6 +914,8 @@ export async function main(args: string[], options?: MainOptions) {
 		process.exit(0);
 	}
 
+	// 读取管道输入（如 `cat file | pi -p`）；RPC 模式下 stdin 被 JSON-RPC 占用故跳过。
+	// 若交互模式下检测到管道输入，自动降级为 print 模式。
 	// Read piped stdin content (if any) - skip for RPC mode which uses stdin for JSON-RPC
 	let stdinContent: string | undefined;
 	if (appMode !== "rpc") {
@@ -875,12 +926,14 @@ export async function main(args: string[], options?: MainOptions) {
 	}
 	time("readPipedStdin");
 
+	// 组装初始 prompt（prompt 组织环节）：stdin 内容 + @file 文件内容 + 第一条位置参数消息。
 	const { initialMessage, initialImages } = await prepareInitialMessage(
 		parsed,
 		settingsManager.getImageAutoResize(),
 		stdinContent,
 	);
 	time("prepareInitialMessage");
+	// 初始化主题（print 模式也需要，用于降级渲染）。
 	initTheme(settingsManager.getTheme(), appMode === "interactive");
 	time("initTheme");
 
@@ -890,6 +943,7 @@ export async function main(args: string[], options?: MainOptions) {
 	}
 
 	time("resolveModelScope");
+	// 汇总启动期诊断；非交互模式直接打印，存在 error 级诊断则退出。
 	const startupDiagnostics = deduplicateDiagnostics([...startupSettingsDiagnostics, ...runtime.diagnostics]);
 	const hasRuntimeErrors = runtime.diagnostics.some((diagnostic) => diagnostic.type === "error");
 	if (appMode !== "interactive" || hasRuntimeErrors) {
@@ -903,6 +957,7 @@ export async function main(args: string[], options?: MainOptions) {
 	}
 	time("createAgentSession");
 
+	// 非交互模式下没有任何可用模型时无法执行，报错退出。
 	if (appMode !== "interactive" && !session.model) {
 		console.error(chalk.red(formatNoModelsAvailableMessage()));
 		process.exit(1);
@@ -914,6 +969,7 @@ export async function main(args: string[], options?: MainOptions) {
 		process.exit(1);
 	}
 
+	// RPC 模式在此后台刷新模型目录；交互模式推迟到 TUI 初始化后再刷新。
 	// RPC refreshes catalogs here in the background; interactive mode starts its refresh after TUI initialization.
 	if (!offlineMode && appMode === "rpc") {
 		const controller = new AbortController();
@@ -924,10 +980,16 @@ export async function main(args: string[], options?: MainOptions) {
 			.finally(() => clearTimeout(timeout));
 	}
 
+	// ===================== 模式分发 =====================
+	// - rpc：供编辑器等外部程序通过 JSON-RPC 驱动 pi（stdin/stdout 传 JSON）
+	// - interactive：TUI 交互模式（本注释计划不展开，见 modes/interactive/）
+	// - print/json：单次执行 initialMessage 与后续 messages，输出结果后退出
 	if (appMode === "rpc") {
 		printTimings();
 		await runRpcMode(runtime);
 	} else if (appMode === "interactive") {
+		// 进入 TUI：把 runtime 交给 InteractiveMode；后续用户输入在 TUI 里
+		// 仍经由同一个 session.prompt() 进入核心链路。
 		const interactiveMode = new InteractiveMode(runtime, {
 			migratedProviders,
 			startupDiagnostics,
@@ -961,6 +1023,7 @@ export async function main(args: string[], options?: MainOptions) {
 		printTimings();
 		await interactiveMode.run();
 	} else {
+		// print/json 模式：单次执行，详见 modes/print-mode.ts。
 		printTimings();
 		const exitCode = await runPrintMode(runtime, {
 			mode: toPrintOutputMode(appMode),

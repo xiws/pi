@@ -10,6 +10,11 @@ import type { TuiMode } from "../core/settings-manager.ts";
 
 export type Mode = "text" | "json" | "rpc";
 
+// parseArgs 的输出结构：每个字段对应一个 CLI 选项；另有几个特殊字段：
+// - messages：位置参数（不以 - 开头的参数），即“用户 prompt”（可多条）
+// - fileArgs：以 @ 开头的参数（去掉 @ 后的文件路径），内容会被读进初始 prompt
+// - unknownFlags：无法识别的 flag（可能是扩展注册的），透传给扩展
+// - diagnostics：解析期间的错误/警告，由调用方决定是否打印并退出
 export interface Args {
 	provider?: string;
 	model?: string;
@@ -68,6 +73,11 @@ export function normalizeSessionName(value: string): string | undefined {
 	return name.length > 0 ? name : undefined;
 }
 
+// 把 argv 数组解析成 Args。实现是手写的逐参数循环（没有用第三方解析库）：
+// - 以 "--" 开头的是长选项；带值的选项把 i 前进一格取值（args[++i]）
+// - "--" 之后的所有参数按“@开头=fileArgs，否则=messages”处理
+// - 不认识的 "--xxx" 存入 unknownFlags（可能是扩展注册的 flag）
+// - 其余不以 - 开头的参数收进 messages，第一条将成为初始 prompt
 export function parseArgs(args: string[]): Args {
 	const result: Args = {
 		messages: [],
@@ -79,6 +89,7 @@ export function parseArgs(args: string[]): Args {
 	for (let i = 0; i < args.length; i++) {
 		const arg = args[i];
 
+		// "--" 是分隔符：它之后不再解析任何选项，全部当作消息/文件。
 		if (arg === "--") {
 			for (const positionalArg of args.slice(i + 1)) {
 				if (positionalArg.startsWith("@")) {
@@ -155,6 +166,7 @@ export function parseArgs(args: string[]): Args {
 				});
 			}
 		} else if (arg === "--print" || arg === "-p") {
+			// -p：单次执行模式；它后面紧跟的参数（若非 flag/@file）直接当作 prompt。
 			result.print = true;
 			const next = args[i + 1];
 			if (next !== undefined && !next.startsWith("@") && (!next.startsWith("-") || next.startsWith("---"))) {
@@ -223,8 +235,11 @@ export function parseArgs(args: string[]): Args {
 		} else if (arg === "--offline") {
 			result.offline = true;
 		} else if (arg.startsWith("@")) {
+			// @file 参数：去掉 @ 前缀后记录路径，内容稍后由 processFileArguments 读入。
 			result.fileArgs.push(arg.slice(1)); // Remove @ prefix
 		} else if (arg.startsWith("--")) {
+			// 未知的 "--xxx"：支持 --flag=value 和 --flag value 两种写法，
+			// 存入 unknownFlags 稍后交给扩展处理（不在这里报错）。
 			const eqIndex = arg.indexOf("=");
 			if (eqIndex !== -1) {
 				result.unknownFlags.set(arg.slice(2, eqIndex), arg.slice(eqIndex + 1));

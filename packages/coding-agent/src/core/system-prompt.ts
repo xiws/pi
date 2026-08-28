@@ -25,6 +25,12 @@ export interface BuildSystemPromptOptions {
 }
 
 /** Build the system prompt with tools, guidelines, and context */
+// 中文说明：拼装系统提示词（LLM 每次请求的 system 部分），结构依次为：
+//   身份描述 → 可用工具列表 → 行为指南 → pi 文档指引 → appendSystemPrompt
+//   → <project_context>（AGENTS.md/CLAUDE.md 等项目上下文文件）→ 技能列表 → cwd
+// 若传入 customPrompt（--system-prompt 或项目自定义提示词），则替换默认主体，
+// 仅保留 append/项目上下文/技能/cwd 这些附加段。
+// 调用方：AgentSession._rebuildSystemPrompt（工具或资源变化时重建）。
 export function buildSystemPrompt(options: BuildSystemPromptOptions): string {
 	const {
 		customPrompt,
@@ -72,11 +78,14 @@ export function buildSystemPrompt(options: BuildSystemPromptOptions): string {
 	}
 
 	// Get absolute paths to documentation and examples
+	// 拿到 pi 自身文档/示例的绝对路径（写进提示词，供模型需要时读取）。
 	const readmePath = getReadmePath();
 	const docsPath = getDocsPath();
 	const examplesPath = getExamplesPath();
 
 	// Build tools list based on selected tools.
+	// 工具列表：只展示提供了一行说明（toolSnippets）的工具；
+	// 工具的真实定义通过 API 的 tools 参数传给模型，这里只是提示词里的文字介绍。
 	// A tool appears in Available tools only when the caller provides a one-line snippet.
 	const tools = selectedTools || ["read", "bash", "edit", "write"];
 	const visibleTools = tools.filter((name) => !!toolSnippets?.[name]);
@@ -84,6 +93,8 @@ export function buildSystemPrompt(options: BuildSystemPromptOptions): string {
 		visibleTools.length > 0 ? visibleTools.map((name) => `- ${name}: ${toolSnippets![name]}`).join("\n") : "(none)";
 
 	// Build guidelines based on which tools are actually available
+	// 行为指南：根据实际启用的工具生成（比如没有 grep/find 时提示用 bash 搜索），
+	// 再追加扩展提供的 guidelines 和固定条目，用 Set 去重。
 	const guidelinesList: string[] = [];
 	const guidelinesSet = new Set<string>();
 	const addGuideline = (guideline: string): void => {
@@ -149,6 +160,7 @@ Pi documentation (read only when the user asks about pi itself, its SDK, extensi
 	}
 
 	// Append project context files
+	// 项目上下文：把 AGENTS.md/CLAUDE.md 等包在 <project_context> 标签里附到提示词尾部。
 	if (contextFiles.length > 0) {
 		prompt += "\n\n<project_context>\n\n";
 		prompt += "Project-specific instructions and guidelines:\n\n";

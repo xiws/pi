@@ -70,6 +70,11 @@ function extractUserMessageText(content: string | Array<{ type: string; text?: s
  * Session replacement methods tear down the current runtime first, then create
  * and apply the next runtime. If creation fails, the error is propagated to the
  * caller. The caller is responsible for user-facing error handling.
+ *
+ * 中文说明：AgentSessionRuntime 是“当前会话 + 当前 cwd 绑定服务”的持有者。
+ * 它封装了切换会话的生命周期：先 abort/销毁旧会话（teardownCurrent），
+ * 再用同一个工厂闭包按新 cwd 重建整套服务与会话（createRuntime），最后 apply 替换。
+ * switchSession/newSession/fork/importFromJsonl 都遵循这个“先拆后建”模式。
  */
 export class AgentSessionRuntime {
 	private rebindSession?: (session: AgentSession) => Promise<void>;
@@ -410,6 +415,10 @@ export class AgentSessionRuntime {
  *
  * The same factory is stored on the returned AgentSessionRuntime and reused for
  * later /new, /resume, /fork, and import flows.
+ *
+ * 中文说明：启动时的主入口。第一步校验会话 cwd 存在；第二步执行工厂闭包
+ * （内部：createAgentSessionServices 建服务 → createAgentSessionFromServices 建会话，
+ * 见 agent-session-services.ts 与 sdk.ts）；第三步把结果包成 AgentSessionRuntime 返回。
  */
 export async function createAgentSessionRuntime(
 	createRuntime: CreateAgentSessionRuntimeFactory,
@@ -421,6 +430,7 @@ export async function createAgentSessionRuntime(
 	},
 ): Promise<AgentSessionRuntime> {
 	assertSessionCwdExists(options.sessionManager, options.cwd);
+	// 执行工厂闭包：建服务 + 建会话（工厂实现在 main.ts 的 createRuntime）。
 	const result = await createRuntime(options);
 	return new AgentSessionRuntime(
 		result.session,

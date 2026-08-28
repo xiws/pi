@@ -463,6 +463,7 @@ export class ModelRuntime implements Models {
 		return this.isUsingOAuth(providerId) && this.models.getProvider(providerId)?.auth.oauth?.isSubscription === true;
 	}
 
+	// 该 provider 是否已配置凭据（API key 或 OAuth），prompt 发送前校验用。
 	hasConfiguredAuth(providerId: string): boolean {
 		return this.snapshot.configuredProviders.has(providerId);
 	}
@@ -633,6 +634,9 @@ export class ModelRuntime implements Models {
 		return this.stream(model, context, options).result();
 	}
 
+	// 链路终点：Agent 循环里 streamFn 最终调到这里。流程：
+	// prepareRequest（解析该 provider 的凭据/API key、合并请求选项）
+	// → provider.streamSimple（pi-ai 内部调具体 Provider API，返回流式事件）。
 	streamSimple(model: Model<Api>, context: Context, options?: ModelsSimpleStreamOptions): AssistantMessageEventStream {
 		return lazyStream(model, async () => {
 			const prepared = await this.prepareRequest(model, options);
@@ -739,6 +743,7 @@ export class ModelRuntime implements Models {
 		void this.refresh({ allowNetwork: false });
 	}
 
+	// 扩展注册自定义 provider（baseUrl/模型列表/api 类型等配置式接入）。
 	registerProvider(providerId: string, config: ProviderConfigInput): void {
 		// Validate the incoming registration on its own, like the legacy registry:
 		// a broken re-registration must throw without touching the stored config.

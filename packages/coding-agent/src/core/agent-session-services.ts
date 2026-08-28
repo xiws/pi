@@ -131,6 +131,12 @@ function applyExtensionFlagValues(
  * Create cwd-bound runtime services.
  *
  * Returns services plus diagnostics. It does not create an AgentSession.
+ *
+ * 中文说明：创建与 cwd 绑定的三大基础设施服务（此时尚不创建 AgentSession）：
+ * - ModelRuntime：模型/凭据运行时，读 auth.json（API key/OAuth）与 models.json
+ *   （自定义模型），扩展注册的自定义 provider 也在这一步挂进来
+ * - SettingsManager：全局+项目设置（项目是否受信决定是否读项目级设置）
+ * - ResourceLoader：加载扩展/技能/prompt 模板/主题/项目上下文文件（AGENTS.md 等）
  */
 export async function createAgentSessionServices(
 	options: CreateAgentSessionServicesOptions,
@@ -145,6 +151,7 @@ export async function createAgentSessionServices(
 			signal: options.modelRuntimeSignal,
 		}));
 	const settingsManager = options.settingsManager ?? SettingsManager.create(cwd, agentDir);
+	// ResourceLoader 负责“项目资源发现”：扫描扩展/技能/模板/主题/上下文文件并加载。
 	const resourceLoader = new DefaultResourceLoader({
 		...(options.resourceLoaderOptions ?? {}),
 		cwd,
@@ -154,6 +161,7 @@ export async function createAgentSessionServices(
 	await resourceLoader.reload(options.resourceLoaderReloadOptions);
 
 	const diagnostics: AgentSessionRuntimeDiagnostic[] = [];
+	// 扩展在加载期可能注册了自定义 provider，这里把它们挂到 ModelRuntime 上。
 	const extensionsResult = resourceLoader.getExtensions();
 	for (const { name, config, extensionPath } of extensionsResult.runtime.pendingProviderRegistrations) {
 		try {
@@ -198,6 +206,11 @@ export async function createAgentSessionServices(
  * This keeps session creation separate from service creation so callers can
  * resolve model, thinking, tools, and other session inputs against the target
  * cwd before constructing the session.
+ *
+ * 中文说明：服务就绪之后的“建会话”入口：只是把服务与已解析好的会话选项
+ * （模型/thinking/工具）透传给 sdk.ts 的 createAgentSession（核心装配逻辑在那里）。
+ * 拆成两步的原因：模型/工具选项需要先对着服务解析（比如查模型目录），
+ * 解析完才能建会话。
  */
 export async function createAgentSessionFromServices(
 	options: CreateAgentSessionFromServicesOptions,

@@ -29,6 +29,12 @@ export interface PrintModeOptions {
 /**
  * Run in print (single-shot) mode.
  * Sends prompts to the agent and outputs the result.
+ *
+ * 中文说明：print 模式主流程（`pi -p "prompt"` 的执行体）：
+ *   1. 绑定扩展、订阅会话事件（json 模式下把事件流写到 stdout）
+ *   2. session.prompt(initialMessage) —— 驱动完整 Agent 循环（详见 agent-session.ts）
+ *   3. text 模式下取最后一条 assistant 消息的文本写到 stdout
+ *   4. 返回退出码（出错为 1），进程退出
  */
 export async function runPrintMode(runtimeHost: AgentSessionRuntime, options: PrintModeOptions): Promise<number> {
 	const { mode, messages = [], initialMessage, initialImages } = options;
@@ -67,11 +73,14 @@ export async function runPrintMode(runtimeHost: AgentSessionRuntime, options: Pr
 
 	registerSignalHandlers();
 
+	// 会话被替换（new/fork/switch）时，重新绑定新 session 的事件订阅。
 	runtimeHost.setRebindSession(async () => {
 		await rebindSession();
 	});
 
 	const rebindSession = async (): Promise<void> => {
+		// 把当前 session 与扩展运行时绑定；并订阅会话事件：
+		// json 模式下每个内部事件都转成 JSON 行写到 stdout（供外部程序消费）。
 		session = runtimeHost.session;
 		await session.bindExtensions({
 			mode: mode === "json" ? "json" : "print",
@@ -129,14 +138,19 @@ export async function runPrintMode(runtimeHost: AgentSessionRuntime, options: Pr
 		await rebindSession();
 
 		if (initialMessage) {
+			// 核心调用：把组装好的初始 prompt 发给会话；
+			// 这一行会同步驱动完整个 Agent 循环（LLM 响应 + 工具执行 + 多轮）。
 			await session.prompt(initialMessage, { images: initialImages });
 		}
 
+		// messages 是剩余的位置参数消息（initialMessage 之后还有就继续逐条发）。
 		for (const message of messages) {
 			await session.prompt(message);
 		}
 
 		if (mode === "text") {
+			// text 模式输出：取会话历史最后一条 assistant 消息，
+			// 出错/中止则打错误信息并返回非零退出码，否则把文本写到 stdout。
 			const state = session.state;
 			const lastMessage = state.messages[state.messages.length - 1];
 

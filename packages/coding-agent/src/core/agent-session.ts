@@ -1042,6 +1042,10 @@ export class AgentSession {
 		return Array.from(unique);
 	}
 
+	// 重建“基础系统提示词”：收集当前启用工具的说明/指南 + 资源加载器拿到的
+	// 自定义 system prompt（--system-prompt）、追加内容、技能列表、项目上下文文件
+	// （AGENTS.md/CLAUDE.md），交给 buildSystemPrompt 拼装（详见 system-prompt.ts）。
+	// 结果最终存入 agent.state.systemPrompt，作为每次 LLM 请求的 system 部分。
 	private _rebuildSystemPrompt(toolNames: string[]): string {
 		const validToolNames = toolNames.filter((name) => this._toolRegistry.has(name));
 		const toolSnippets: Record<string, string> = {};
@@ -1082,6 +1086,8 @@ export class AgentSession {
 	// Prompting
 	// =========================================================================
 
+	// 真正驱动 Agent 执行：agent.prompt() 跑完一轮后，检查是否需要自动重试/压缩/
+	// 续跑（_handlePostAgentRun 返回 true 就 agent.continue() 继续下一轮）。
 	private async _runAgentPrompt(messages: AgentMessage | AgentMessage[]): Promise<void> {
 		this._isAgentRunActive = true;
 		try {
@@ -1142,6 +1148,7 @@ export class AgentSession {
 		let messages: AgentMessage[] | undefined;
 
 		try {
+			// 第 1 步：以 "/" 开头的输入先尝试当作扩展命令执行（如 /compact），执行完直接返回。
 			// Handle extension commands first (execute immediately, even during streaming)
 			// Extension commands manage their own LLM interaction via pi.sendMessage()
 			if (expandPromptTemplates && text.startsWith("/")) {
@@ -1159,6 +1166,7 @@ export class AgentSession {
 				);
 			}
 
+			// 第 2 步：发出 input 扩展事件，允许扩展拦截（handled）或改写（transform）输入。
 			// Emit input event for extension interception (before skill/template expansion)
 			let currentText = text;
 			let currentImages = options?.images;
@@ -1179,6 +1187,7 @@ export class AgentSession {
 				}
 			}
 
+			// 第 3 步：展开 /skill:xxx 技能命令与 /template prompt 模板为完整文本。
 			// Expand skill commands (/skill:name args) and prompt templates (/template args)
 			let expandedText = currentText;
 			if (expandPromptTemplates) {
@@ -1186,6 +1195,8 @@ export class AgentSession {
 				expandedText = expandPromptTemplate(expandedText, [...this.promptTemplates]);
 			}
 
+			// 第 4 步：如果 Agent 正在流式输出中，不能立即执行，把消息排入
+			// steer（当前轮结束前注入）或 followUp（本轮结束后注入）队列。
 			// If streaming, queue via steer() or followUp() based on option
 			if (this.isStreaming) {
 				if (!options?.streamingBehavior) {
@@ -1202,6 +1213,7 @@ export class AgentSession {
 				return;
 			}
 
+			// 第 5 步：校验。模型已选、provider 有可用凭据（API key/OAuth），否则抛错。
 			// Flush any pending bash and custom messages before the new prompt
 			this._flushPendingBashMessages();
 			this._flushPendingCustomMessages();
@@ -1226,6 +1238,7 @@ export class AgentSession {
 				throw new Error(formatNoApiKeyFoundMessage(this.model.provider));
 			}
 
+			// 第 6 步：上下文压缩检查（上下文窗口快满时自动压缩历史）。
 			// Check if we need to compact before sending (catches aborted responses).
 			// The user's new prompt is sent below, so do not call agent.continue() here.
 			const lastAssistant = this._findLastAssistantMessage();
@@ -1233,6 +1246,7 @@ export class AgentSession {
 				await this._checkCompaction(lastAssistant, false);
 			}
 
+			// 第 7 步：组装本轮消息数组：用户消息（文本+图片）+ 挂起的 nextTurn 消息。
 			// Build messages array (custom message if any, then user message)
 			messages = [];
 
@@ -1253,6 +1267,8 @@ export class AgentSession {
 			}
 			this._pendingNextTurnMessages = [];
 
+			// 第 8 步：发出 before_agent_start 扩展事件：扩展可追加自定义消息、
+			// 或临时改写本轮的 system prompt。
 			// Emit before_agent_start extension event
 			const result = await this._extensionRunner.emitBeforeAgentStart(
 				expandedText,
@@ -1292,6 +1308,7 @@ export class AgentSession {
 			return;
 		}
 
+		// 第 9 步：把组装好的消息交给 Agent 执行（进入 packages/agent 的核心循环）。
 		preflightResult?.(true);
 		await this._runAgentPrompt(messages);
 	}

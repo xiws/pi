@@ -169,6 +169,13 @@ function getDefaultAgentDir(): string {
  *   sessionManager: SessionManager.inMemory(),
  * });
  * ```
+ *
+ * 中文说明：createAgentSession 是“装配核心”，把所有零件拼成一个可用的会话：
+ *   1. 确定模型（优先级：CLI 显式指定 > 已有会话恢复 > 设置默认 > 找一个可用的）
+ *   2. 确定思考级别（thinkingLevel，并按模型能力钳制）
+ *   3. 确定启用的工具集（read/bash/edit/write 等内置工具 + 扩展工具）
+ *   4. new Agent（ pi-agent-core 的核心，streamFn 桥接到 modelRuntime 发 LLM 请求）
+ *   5. new AgentSession（包装 Agent，加入会话持久化/压缩/扩展等会话级能力）
  */
 export async function createAgentSession(options: CreateAgentSessionOptions = {}): Promise<CreateAgentSessionResult> {
 	const cwd = resolvePath(options.cwd ?? options.sessionManager?.getCwd() ?? process.cwd());
@@ -196,6 +203,8 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 	let model = options.model;
 	let modelFallbackMessage: string | undefined;
 
+	// 第 1 步：模型恢复。若是从磁盘恢复的已有会话，优先用会话里记录的模型
+	// （且该 provider 已配置凭据才可用），否则继续往下找。
 	// If session has data, try to restore model from it
 	if (!model && hasExistingSession && existingSession.model) {
 		const restoredModel = modelRuntime.getModel(existingSession.model.provider, existingSession.model.modelId);
@@ -226,6 +235,8 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		}
 	}
 
+	// 第 2 步：思考级别收敛。依次尝试：恢复自会话 > 模型级覆盖 > 全局默认；
+	// 最后 clampThinkingLevel 按模型能力裁剪（比如模型不支持 high 就降级）。
 	let thinkingLevel = options.thinkingLevel;
 
 	// If session has data, restore thinking level from it
@@ -253,6 +264,8 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		thinkingLevel = clampThinkingLevel(model, thinkingLevel) as ThinkingLevel;
 	}
 
+	// 第 3 步：确定初始启用的工具名单。默认 read/bash/edit/write，
+	// 可被 --tools 白名单或 --no-tools/--exclude-tools 改变。
 	const defaultActiveToolNames: ToolName[] = ["read", "bash", "edit", "write"];
 	const configuredDefaultToolNames = settingsManager.getDefaultTools();
 	const allowedToolNames = options.tools ?? (options.noTools === "all" ? [] : undefined);
@@ -264,6 +277,8 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 
 	let agent: Agent;
 
+	// convertToLlm：把内部消息格式（含系统/自定义消息）转成 LLM 认识的格式。
+	// 这里包了一层：若设置开启了 blockImages，把图片内容替换为占位文本（防御性过滤）。
 	// Create convertToLlm wrapper that filters images if blockImages is enabled (defense-in-depth)
 	const convertToLlmWithBlockImages = (messages: AgentMessage[]): Message[] => {
 		const converted = convertToLlm(messages);
@@ -303,6 +318,12 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 
 	const extensionRunnerRef: { current?: ExtensionRunner } = {};
 
+	// 第 4 步：创建 Agent（pi-agent-core 的核心引擎，与 provider 无关）。
+	// 关键回调：
+	// - streamFn：真正发起 LLM 请求的桥（这里转发给 modelRuntime.streamSimple，见支线）
+	// - onPayload/onResponse：扩展钩子（请求发出前/响应收到后可拦截修改）
+	// - transformContext：每次请求前让扩展改写上下文消息
+	// - steeringMode/followUpMode：控制排队消息的消费策略
 	agent = new Agent({
 		initialState: {
 			systemPrompt: "",
@@ -312,6 +333,9 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		},
 		convertToLlm: convertToLlmWithBlockImages,
 		streamFn: async (model, context, options) => {
+			// LLM 请求桥：Agent 循环每次要调模型时都会调用这里。
+			// 从设置读取重试/超时策略，合并归因头，最后交给 modelRuntime.streamSimple
+			// → pi-ai → 具体 Provider API（详见 model-runtime.ts）。
 			const providerRetrySettings = settingsManager.getProviderRetrySettings();
 			const httpIdleTimeoutMs = settingsManager.getHttpIdleTimeoutMs();
 			// SDKs treat timeout=0 as 0ms (immediate timeout), not "no timeout".
@@ -371,6 +395,8 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		maxRetryDelayMs: settingsManager.getProviderRetrySettings().maxRetryDelayMs,
 	});
 
+	// 恢复/初始化会话历史：已有会话把消息灌回 Agent；新会话把初始模型/思考级别落盘，
+	// 以便下次 --continue 时恢复。
 	// Restore messages if session has existing data
 	if (hasExistingSession) {
 		agent.state.messages = existingSession.messages;
@@ -385,6 +411,8 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		sessionManager.appendThinkingLevelChange(thinkingLevel);
 	}
 
+	// 第 5 步：包装成 AgentSession（会话层：持久化、压缩、扩展、steer/followUp 等都在这层）。
+	// 到这里，从 CLI 参数到可执行会话的装配就完成了。
 	const session = new AgentSession({
 		agent,
 		sessionManager,
