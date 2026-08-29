@@ -449,7 +449,7 @@ describe("parseArgs", () => {
 		});
 
 		test("parses @file arguments", () => {
-			const result = parseArgs(["@README.md", "@src/main.ts"]);
+			const result = parseArgs(["@README.en.md", "@src/main.ts"]);
 			expect(result.fileArgs).toEqual(["README.md", "src/main.ts"]);
 		});
 
