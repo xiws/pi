@@ -77,6 +77,7 @@ function extractUserMessageText(content: string | Array<{ type: string; text?: s
  * switchSession/newSession/fork/importFromJsonl 都遵循这个“先拆后建”模式。
  */
 export class AgentSessionRuntime {
+	//把当前 session 与扩展运行时绑定；并订阅会话事件：
 	private rebindSession?: (session: AgentSession) => Promise<void>;
 	private beforeSessionInvalidate?: () => void;
 	private _session: AgentSession;
