@@ -72,12 +72,12 @@ describe("canonicalizePath", () => {
 describe("getCwdRelativePath", () => {
 	it("keeps cwd-relative names that start with dots", () => {
 		const cwd = join(tmpdir(), "pi-paths-cwd");
-		expect(getCwdRelativePath(join(cwd, "..config", "AGENTS.md"), cwd)).toBe(join("..config", "AGENTS.md"));
+		expect(getCwdRelativePath(join(cwd, "..config", "2AGENTS.md.bak"), cwd)).toBe(join("..config", "2AGENTS.md.bak"));
 	});
 
 	it("rejects parent-directory traversals", () => {
 		const cwd = join(tmpdir(), "pi-paths-cwd");
-		expect(getCwdRelativePath(join(cwd, "..", "AGENTS.md"), cwd)).toBeUndefined();
+		expect(getCwdRelativePath(join(cwd, "..", "2AGENTS.md.bak"), cwd)).toBeUndefined();
 	});
 });
 

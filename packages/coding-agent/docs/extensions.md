@@ -544,7 +544,7 @@ pi.on("before_agent_start", async (event, ctx) => {
   //   .promptGuidelines - custom guideline bullets
   //   .appendSystemPrompt - text from --append-system-prompt flags
   //   .cwd - working directory
-  //   .contextFiles - AGENTS.md files and other loaded context files
+  //   .contextFiles - 2AGENTS.md.bak files and other loaded context files
   //   .skills - loaded skills
 
   return {

@@ -27,7 +27,7 @@ export interface BuildSystemPromptOptions {
 /** Build the system prompt with tools, guidelines, and context */
 // 中文说明：拼装系统提示词（LLM 每次请求的 system 部分），结构依次为：
 //   身份描述 → 可用工具列表 → 行为指南 → pi 文档指引 → appendSystemPrompt
-//   → <project_context>（AGENTS.md/CLAUDE.md 等项目上下文文件）→ 技能列表 → cwd
+//   → <project_context>（2AGENTS.md.bak/CLAUDE.md 等项目上下文文件）→ 技能列表 → cwd
 // 若传入 customPrompt（--system-prompt 或项目自定义提示词），则替换默认主体，
 // 仅保留 append/项目上下文/技能/cwd 这些附加段。
 // 调用方：AgentSession._rebuildSystemPrompt（工具或资源变化时重建）。
@@ -160,7 +160,7 @@ Pi documentation (read only when the user asks about pi itself, its SDK, extensi
 	}
 
 	// Append project context files
-	// 项目上下文：把 AGENTS.md/CLAUDE.md 等包在 <project_context> 标签里附到提示词尾部。
+	// 项目上下文：把 2AGENTS.md.bak/CLAUDE.md 等包在 <project_context> 标签里附到提示词尾部。
 	if (contextFiles.length > 0) {
 		prompt += "\n\n<project_context>\n\n";
 		prompt += "Project-specific instructions and guidelines:\n\n";

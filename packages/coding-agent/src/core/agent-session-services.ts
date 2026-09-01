@@ -136,7 +136,7 @@ function applyExtensionFlagValues(
  * - ModelRuntime：模型/凭据运行时，读 auth.json（API key/OAuth）与 models.json
  *   （自定义模型），扩展注册的自定义 provider 也在这一步挂进来
  * - SettingsManager：全局+项目设置（项目是否受信决定是否读项目级设置）
- * - ResourceLoader：加载扩展/技能/prompt 模板/主题/项目上下文文件（AGENTS.md 等）
+ * - ResourceLoader：加载扩展/技能/prompt 模板/主题/项目上下文文件（2AGENTS.md.bak 等）
  */
 export async function createAgentSessionServices(
 	options: CreateAgentSessionServicesOptions,

@@ -3170,7 +3170,7 @@ Examples:
   pkg install nodejs termux-api git
   npm install -g @mariozechner/pi-coding-agent
   mkdir -p ~/.pi/agent
-  echo "You are running on Android in Termux." > ~/.pi/agent/AGENTS.md
+  echo "You are running on Android in Termux." > ~/.pi/agent/2AGENTS.md.bak
   ```
   Clipboard operations fall back gracefully when `termux-api` is unavailable. ([#1164](https://github.com/badlogic/pi-mono/issues/1164))
 - **Bash spawn hook**: Extensions can now intercept and modify bash commands before execution via `pi.setBashSpawnHook()`. Adjust the command string, working directory, or environment variables. See [docs/extensions.md](docs/extensions.md). ([#1160](https://github.com/badlogic/pi-mono/pull/1160) by [@mitsuhiko](https://github.com/mitsuhiko))

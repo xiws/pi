@@ -345,23 +345,23 @@ Content`,
 			expect(themes.some((t) => t.sourcePath?.endsWith("skip.json"))).toBe(false);
 		});
 
-		it("should discover AGENTS.md context files", async () => {
-			writeFileSync(join(cwd, "AGENTS.md"), "# Project Guidelines\n\nBe helpful.");
+		it("should discover 2AGENTS.md.bak context files", async () => {
+			writeFileSync(join(cwd, "2AGENTS.md.bak"), "# Project Guidelines\n\nBe helpful.");
 
 			const loader = new DefaultResourceLoader({ cwd, agentDir });
 			await loader.reload();
 
 			const { agentsFiles } = loader.getAgentsFiles();
-			expect(agentsFiles.some((f) => f.path.includes("AGENTS.md"))).toBe(true);
+			expect(agentsFiles.some((f) => f.path.includes("2AGENTS.md.bak"))).toBe(true);
 		});
 
 		it("should prefer AGENTS.override.md within each directory while preserving ancestor layering", async () => {
 			const nestedCwd = join(cwd, "service");
 			mkdirSync(nestedCwd);
-			writeFileSync(join(agentDir, "AGENTS.md"), "global instructions");
+			writeFileSync(join(agentDir, "2AGENTS.md.bak"), "global instructions");
 			writeFileSync(join(agentDir, "AGENTS.override.md"), "global override");
-			writeFileSync(join(cwd, "AGENTS.md"), "project instructions");
-			writeFileSync(join(nestedCwd, "AGENTS.md"), "service instructions");
+			writeFileSync(join(cwd, "2AGENTS.md.bak"), "project instructions");
+			writeFileSync(join(nestedCwd, "2AGENTS.md.bak"), "service instructions");
 			writeFileSync(join(nestedCwd, "AGENTS.override.md"), "service override");
 
 			const loader = new DefaultResourceLoader({ cwd: nestedCwd, agentDir });
@@ -369,14 +369,14 @@ Content`,
 
 			expect(loader.getAgentsFiles().agentsFiles).toEqual([
 				{ path: join(agentDir, "AGENTS.override.md"), content: "global override" },
-				{ path: join(cwd, "AGENTS.md"), content: "project instructions" },
+				{ path: join(cwd, "2AGENTS.md.bak"), content: "project instructions" },
 				{ path: join(nestedCwd, "AGENTS.override.md"), content: "service override" },
 			]);
 		});
 
 		it("should ignore context file candidates that are directories", async () => {
 			mkdirSync(join(cwd, "AGENTS.override.md"));
-			mkdirSync(join(cwd, "AGENTS.md"));
+			mkdirSync(join(cwd, "2AGENTS.md.bak"));
 			writeFileSync(join(cwd, "CLAUDE.md"), "Fallback instructions");
 			const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 
@@ -387,14 +387,14 @@ Content`,
 				path: join(cwd, "CLAUDE.md"),
 				content: "Fallback instructions",
 			});
-			expect(consoleError).not.toHaveBeenCalledWith(expect.stringContaining(join(cwd, "AGENTS.md")));
+			expect(consoleError).not.toHaveBeenCalledWith(expect.stringContaining(join(cwd, "2AGENTS.md.bak")));
 			expect(consoleError).not.toHaveBeenCalledWith(expect.stringContaining(join(cwd, "AGENTS.override.md")));
 			consoleError.mockRestore();
 		});
 
 		it("should skip context file discovery when noContextFiles is true", async () => {
 			writeFileSync(join(cwd, "AGENTS.override.md"), "# Override Guidelines\n\nBe helpful.");
-			writeFileSync(join(cwd, "AGENTS.md"), "# Project Guidelines\n\nBe helpful.");
+			writeFileSync(join(cwd, "2AGENTS.md.bak"), "# Project Guidelines\n\nBe helpful.");
 			writeFileSync(join(cwd, "CLAUDE.md"), "# Claude Guidelines\n\nBe helpful.");
 
 			const loader = new DefaultResourceLoader({ cwd, agentDir, noContextFiles: true });
@@ -427,8 +427,8 @@ Content`,
 			mkdirSync(themesDir, { recursive: true });
 			writeFileSync(join(piDir, "SYSTEM.md"), "Project system prompt.");
 			writeFileSync(join(agentDir, "SYSTEM.md"), "Global system prompt.");
-			writeFileSync(join(agentDir, "AGENTS.md"), "Global instructions");
-			writeFileSync(join(cwd, "AGENTS.md"), "Project instructions");
+			writeFileSync(join(agentDir, "2AGENTS.md.bak"), "Global instructions");
+			writeFileSync(join(cwd, "2AGENTS.md.bak"), "Project instructions");
 			writeFileSync(join(extensionsDir, "project.ts"), `throw new Error("should not load");`);
 			writeFileSync(
 				join(skillDir, "SKILL.md"),
@@ -450,10 +450,12 @@ Project skill content`,
 			await loader.reload();
 
 			expect(loader.getSystemPrompt()).toBe("Global system prompt.");
-			expect(loader.getAgentsFiles().agentsFiles.some((file) => file.path === join(agentDir, "AGENTS.md"))).toBe(
+			expect(
+				loader.getAgentsFiles().agentsFiles.some((file) => file.path === join(agentDir, "2AGENTS.md.bak")),
+			).toBe(true);
+			expect(loader.getAgentsFiles().agentsFiles.some((file) => file.path === join(cwd, "2AGENTS.md.bak"))).toBe(
 				true,
 			);
-			expect(loader.getAgentsFiles().agentsFiles.some((file) => file.path === join(cwd, "AGENTS.md"))).toBe(true);
 			expect(loader.getExtensions().extensions).toHaveLength(0);
 			expect(loader.getExtensions().errors).toEqual([]);
 			expect(loader.getSkills().skills.some((skill) => skill.name === "project-skill")).toBe(false);
@@ -974,7 +976,7 @@ export default function(pi: ExtensionAPI) {
 		};
 
 		// Main repo at <tempDir>/outer/main with a linked worktree at main/worktrees/feat.
-		// Each case writes only the AGENTS.md files it needs.
+		// Each case writes only the 2AGENTS.md.bak files it needs.
 		const setupNestedWorktree = () => {
 			const outer = join(tempDir, "outer");
 			const main = join(outer, "main");
@@ -987,8 +989,8 @@ export default function(pi: ExtensionAPI) {
 
 		it("should skip the main repo's duplicate when the worktree root has its own context", () => {
 			const { main, worktree, worktreeSrc } = setupNestedWorktree();
-			writeFileSync(join(main, "AGENTS.md"), "main repo instructions");
-			writeFileSync(join(worktree, "AGENTS.md"), "worktree instructions");
+			writeFileSync(join(main, "2AGENTS.md.bak"), "main repo instructions");
+			writeFileSync(join(worktree, "2AGENTS.md.bak"), "worktree instructions");
 
 			const files = loadProjectContextFiles({ cwd: worktreeSrc, agentDir });
 
@@ -997,7 +999,7 @@ export default function(pi: ExtensionAPI) {
 
 		it("should still inherit the main repo's context when the worktree root has none", () => {
 			const { main, worktreeSrc } = setupNestedWorktree();
-			writeFileSync(join(main, "AGENTS.md"), "main repo instructions");
+			writeFileSync(join(main, "2AGENTS.md.bak"), "main repo instructions");
 
 			const files = loadProjectContextFiles({ cwd: worktreeSrc, agentDir });
 
@@ -1005,12 +1007,12 @@ export default function(pi: ExtensionAPI) {
 		});
 
 		it("should only skip the same filename, not a differently named context file", () => {
-			// The repo tracks CLAUDE.md; the worktree adds an AGENTS.md, which
+			// The repo tracks CLAUDE.md; the worktree adds an 2AGENTS.md.bak, which
 			// loadContextFileFromDir prefers. The main repo's CLAUDE.md is nobody's
 			// duplicate, so dropping it would lose its content entirely.
 			const { main, worktree, worktreeSrc } = setupNestedWorktree();
 			writeFileSync(join(main, "CLAUDE.md"), "main repo instructions");
-			writeFileSync(join(worktree, "AGENTS.md"), "worktree instructions");
+			writeFileSync(join(worktree, "2AGENTS.md.bak"), "worktree instructions");
 
 			const files = loadProjectContextFiles({ cwd: worktreeSrc, agentDir });
 
@@ -1020,7 +1022,7 @@ export default function(pi: ExtensionAPI) {
 		it("should NOT skip the container's context in a bare layout (proj/.bare + proj/main)", () => {
 			// `git clone --bare proj/.bare` + `git worktree add ../main` makes commondir
 			// `../..`, so dirname(commonGitDir) is `proj` - a plain directory that tracks
-			// nothing. Its AGENTS.md is not a duplicate of the worktree's. Layout below
+			// nothing. Its 2AGENTS.md.bak is not a duplicate of the worktree's. Layout below
 			// matches what real git writes for this setup.
 			const proj = join(tempDir, "proj");
 			const bare = join(proj, ".bare");
@@ -1032,8 +1034,8 @@ export default function(pi: ExtensionAPI) {
 			writeFileSync(join(worktreeGitDir, "HEAD"), "ref: refs/heads/main\n");
 			writeFileSync(join(worktreeGitDir, "commondir"), "../..");
 			writeFileSync(join(worktree, ".git"), `gitdir: ${worktreeGitDir}\n`);
-			writeFileSync(join(proj, "AGENTS.md"), "container instructions");
-			writeFileSync(join(worktree, "AGENTS.md"), "worktree instructions");
+			writeFileSync(join(proj, "2AGENTS.md.bak"), "container instructions");
+			writeFileSync(join(worktree, "2AGENTS.md.bak"), "worktree instructions");
 
 			const files = loadProjectContextFiles({ cwd: worktree, agentDir });
 
@@ -1042,9 +1044,9 @@ export default function(pi: ExtensionAPI) {
 
 		it("should keep loading ancestors above the main repo", () => {
 			const { outer, main, worktree, worktreeSrc } = setupNestedWorktree();
-			writeFileSync(join(outer, "AGENTS.md"), "outer instructions");
-			writeFileSync(join(main, "AGENTS.md"), "main repo instructions");
-			writeFileSync(join(worktree, "AGENTS.md"), "worktree instructions");
+			writeFileSync(join(outer, "2AGENTS.md.bak"), "outer instructions");
+			writeFileSync(join(main, "2AGENTS.md.bak"), "main repo instructions");
+			writeFileSync(join(worktree, "2AGENTS.md.bak"), "worktree instructions");
 
 			const files = loadProjectContextFiles({ cwd: worktreeSrc, agentDir });
 
@@ -1061,8 +1063,8 @@ export default function(pi: ExtensionAPI) {
 			const sibSrc = join(sib, "src");
 			mkdirSync(sibSrc, { recursive: true });
 			mkdirSync(main, { recursive: true });
-			writeFileSync(join(outer, "AGENTS.md"), "outer instructions");
-			writeFileSync(join(sib, "AGENTS.md"), "sibling worktree instructions");
+			writeFileSync(join(outer, "2AGENTS.md.bak"), "outer instructions");
+			writeFileSync(join(sib, "2AGENTS.md.bak"), "sibling worktree instructions");
 			linkWorktree(main, sib, "sib");
 
 			const files = loadProjectContextFiles({ cwd: sibSrc, agentDir });
@@ -1077,8 +1079,8 @@ export default function(pi: ExtensionAPI) {
 			const sub = join(sup, "vendor", "lib");
 			const subSrc = join(sub, "src");
 			mkdirSync(subSrc, { recursive: true });
-			writeFileSync(join(sup, "AGENTS.md"), "superproject instructions");
-			writeFileSync(join(sub, "AGENTS.md"), "submodule instructions");
+			writeFileSync(join(sup, "2AGENTS.md.bak"), "superproject instructions");
+			writeFileSync(join(sub, "2AGENTS.md.bak"), "submodule instructions");
 			const subGitDir = join(sup, ".git", "modules", "vendor", "lib");
 			mkdirSync(subGitDir, { recursive: true });
 			writeFileSync(join(subGitDir, "HEAD"), "ref: refs/heads/main\n");
@@ -1096,9 +1098,9 @@ export default function(pi: ExtensionAPI) {
 			mkdirSync(leaf, { recursive: true });
 			mkdirSync(join(repo, ".git"), { recursive: true });
 			writeFileSync(join(repo, ".git", "HEAD"), "ref: refs/heads/main\n");
-			writeFileSync(join(outer, "AGENTS.md"), "outer instructions");
-			writeFileSync(join(repo, "AGENTS.md"), "repo instructions");
-			writeFileSync(join(leaf, "AGENTS.md"), "leaf instructions");
+			writeFileSync(join(outer, "2AGENTS.md.bak"), "outer instructions");
+			writeFileSync(join(repo, "2AGENTS.md.bak"), "repo instructions");
+			writeFileSync(join(leaf, "2AGENTS.md.bak"), "leaf instructions");
 
 			const files = loadProjectContextFiles({ cwd: leaf, agentDir });
 
@@ -1110,8 +1112,8 @@ export default function(pi: ExtensionAPI) {
 			const src = join(repo, "src");
 			mkdirSync(src, { recursive: true });
 			writeFileSync(join(repo, ".git"), "gitdir: /nonexistent/path/worktrees/feat\n");
-			writeFileSync(join(repo, "AGENTS.md"), "repo instructions");
-			writeFileSync(join(src, "AGENTS.md"), "src instructions");
+			writeFileSync(join(repo, "2AGENTS.md.bak"), "repo instructions");
+			writeFileSync(join(src, "2AGENTS.md.bak"), "src instructions");
 
 			const files = loadProjectContextFiles({ cwd: src, agentDir });
 

@@ -1,5 +1,5 @@
 /**
- * Context Files (AGENTS.md)
+ * Context Files (2AGENTS.md.bak)
  *
  * Context files provide project-specific instructions loaded into the system prompt.
  */
@@ -19,7 +19,7 @@ const loader = new DefaultResourceLoader({
 		agentsFiles: [
 			...current.agentsFiles,
 			{
-				path: "/virtual/AGENTS.md",
+				path: "/virtual/2AGENTS.md.bak",
 				content: `# Project Guidelines
 
 ## Code Style
@@ -32,7 +32,7 @@ const loader = new DefaultResourceLoader({
 });
 await loader.reload();
 
-// Discover AGENTS.md files walking up from cwd
+// Discover 2AGENTS.md.bak files walking up from cwd
 const discovered = loader.getAgentsFiles().agentsFiles;
 console.log("Discovered context files:");
 for (const file of discovered) {

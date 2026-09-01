@@ -1164,7 +1164,10 @@ describe("InteractiveMode.showLoadedResources", () => {
 		const fakeThis = createShowLoadedResourcesThis({
 			quietStartup: false,
 			cwd,
-			contextFiles: [{ path: path.join(home, ".pi", "agent", "AGENTS.md") }, { path: path.join(cwd, "AGENTS.md") }],
+			contextFiles: [
+				{ path: path.join(home, ".pi", "agent", "2AGENTS.md.bak") },
+				{ path: path.join(cwd, "2AGENTS.md.bak") },
+			],
 		});
 
 		(InteractiveMode as any).prototype.showLoadedResources.call(fakeThis, {
@@ -1173,7 +1176,7 @@ describe("InteractiveMode.showLoadedResources", () => {
 
 		const output = renderAll(fakeThis.loadedResourcesContainer).replace(/\\/g, "/");
 		expect(output).toContain("[Context]");
-		expect(output).toContain("~/.pi/agent/AGENTS.md, AGENTS.md");
+		expect(output).toContain("~/.pi/agent/2AGENTS.md.bak, 2AGENTS.md.bak");
 		expect(output).not.toContain(`${cwd.replace(/\\/g, "/")}/AGENTS.md`);
 	});
 
@@ -1184,7 +1187,7 @@ describe("InteractiveMode.showLoadedResources", () => {
 			cwd,
 			systemPromptSource: { path: path.join(cwd, ".pi", "SYSTEM.md") },
 			appendSystemPromptSources: [{ path: path.join(cwd, ".pi", "APPEND_SYSTEM.md") }],
-			contextFiles: [{ path: path.join(cwd, "AGENTS.md") }],
+			contextFiles: [{ path: path.join(cwd, "2AGENTS.md.bak") }],
 		});
 
 		(InteractiveMode as any).prototype.showLoadedResources.call(fakeThis, {
@@ -1193,7 +1196,7 @@ describe("InteractiveMode.showLoadedResources", () => {
 
 		const output = renderAll(fakeThis.loadedResourcesContainer).replace(/\\/g, "/");
 		expect(output).toContain("[Context]");
-		expect(output).toContain(".pi/SYSTEM.md, .pi/APPEND_SYSTEM.md, AGENTS.md");
+		expect(output).toContain(".pi/SYSTEM.md, .pi/APPEND_SYSTEM.md, 2AGENTS.md.bak");
 	});
 
 	test("shows full context paths when expanded", () => {
@@ -1203,7 +1206,10 @@ describe("InteractiveMode.showLoadedResources", () => {
 			quietStartup: false,
 			toolOutputExpanded: true,
 			cwd,
-			contextFiles: [{ path: path.join(home, ".pi", "agent", "AGENTS.md") }, { path: path.join(cwd, "AGENTS.md") }],
+			contextFiles: [
+				{ path: path.join(home, ".pi", "agent", "2AGENTS.md.bak") },
+				{ path: path.join(cwd, "2AGENTS.md.bak") },
+			],
 		});
 
 		(InteractiveMode as any).prototype.showLoadedResources.call(fakeThis, {
@@ -1212,9 +1218,9 @@ describe("InteractiveMode.showLoadedResources", () => {
 
 		const output = renderAll(fakeThis.loadedResourcesContainer).replace(/\\/g, "/");
 		expect(output).toContain("[Context]");
-		expect(output).toContain("~/.pi/agent/AGENTS.md");
-		expect(output).toContain("~/Development/pi-mono/AGENTS.md");
-		expect(output).not.toContain("~/.pi/agent/AGENTS.md, AGENTS.md");
+		expect(output).toContain("~/.pi/agent/2AGENTS.md.bak");
+		expect(output).toContain("~/Development/pi-mono/2AGENTS.md.bak");
+		expect(output).not.toContain("~/.pi/agent/2AGENTS.md.bak, 2AGENTS.md.bak");
 	});
 
 	test("does not show verbose listing on quiet startup during reload", () => {

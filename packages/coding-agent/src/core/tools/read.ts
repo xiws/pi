@@ -40,7 +40,13 @@ interface CompactReadClassification {
 	label: string;
 }
 
-const COMPACT_RESOURCE_FILE_NAMES = new Set(["AGENTS.override.md", "AGENTS.md", "AGENTS.MD", "CLAUDE.md", "CLAUDE.MD"]);
+const COMPACT_RESOURCE_FILE_NAMES = new Set([
+	"AGENTS.override.md",
+	"2AGENTS.md.bak",
+	"AGENTS.MD",
+	"CLAUDE.md",
+	"CLAUDE.MD",
+]);
 
 /**
  * Pluggable operations for the read tool.

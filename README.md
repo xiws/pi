@@ -47,7 +47,7 @@ Pi 不包含限制文件系统、进程、网络或凭据访问的内置权限�
 
 ## 贡献
 
-详见 [CONTRIBUTING.md](CONTRIBUTING.md) 了解贡献指南，[AGENTS.md](AGENTS.md) 了解项目特定规范（适用于人类和代理）。Pi 的长期计划也可以在 [RFCs](https://rfc.earendil.com/keyword/pi/) 中找到。
+详见 [CONTRIBUTING.md](CONTRIBUTING.md) 了解贡献指南，[AGENTS.md](2AGENTS.md.bak) 了解项目特定规范（适用于人类和代理）。Pi 的长期计划也可以在 [RFCs](https://rfc.earendil.com/keyword/pi/) 中找到。
 
 ## 开发
 

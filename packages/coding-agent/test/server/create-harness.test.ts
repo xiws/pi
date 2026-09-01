@@ -320,7 +320,7 @@ describe("coding-agent Harness construction", () => {
 			tools: defaultPromptTools,
 			activeToolNames: ["write", "read"],
 			systemPromptOptions: {
-				contextFiles: [{ path: "/workspace/AGENTS.md", content: "Follow project policy." }],
+				contextFiles: [{ path: "/workspace/2AGENTS.md.bak", content: "Follow project policy." }],
 				skills: [
 					{
 						name: "review",
@@ -343,7 +343,7 @@ describe("coding-agent Harness construction", () => {
 		expect(prompt).toContain("- read: Read file contents");
 		expect(prompt).not.toContain("- bash:");
 		expect(prompt).not.toContain("You can inspect PI_* environment variables");
-		expect(prompt).toContain('<project_instructions path="/workspace/AGENTS.md">');
+		expect(prompt).toContain('<project_instructions path="/workspace/2AGENTS.md.bak">');
 		expect(prompt).toContain("<name>review</name>");
 		expect(prompt.indexOf("Use write only for new files or complete rewrites.")).toBeLessThan(
 			prompt.indexOf("Use read to examine files instead of cat or sed."),

@@ -247,9 +247,9 @@ async function main() {
 		return;
 	}
 
-	// Find AGENTS.md files to compare against
-	const globalAgentsMd = join(homedir(), ".pi/agent/AGENTS.md");
-	const localAgentsMd = join(cwd, "AGENTS.md");
+	// Find 2AGENTS.md.bak files to compare against
+	const globalAgentsMd = join(homedir(), ".pi/agent/2AGENTS.md.bak");
+	const localAgentsMd = join(cwd, "2AGENTS.md.bak");
 	const agentsMdFiles = [globalAgentsMd, localAgentsMd].filter(existsSync);
 	const agentsMdSection =
 		agentsMdFiles.length > 0
@@ -344,7 +344,7 @@ Rules:
 	const aggregationPrompt = `You are aggregating pattern analysis results from multiple summary files.
 
 STEP 1: Read the existing AGENTS.md file(s) to understand what patterns are already encoded:
-${agentsMdFiles.length > 0 ? agentsMdFiles.join("\n") : "(no AGENTS.md files found)"}
+${agentsMdFiles.length > 0 ? agentsMdFiles.join("\n") : "(no 2AGENTS.md.bak files found)"}
 
 STEP 2: Read ALL of the following summary files:
 ${summaryPaths}

@@ -9,7 +9,7 @@
  * - 上下文压缩（手动 /compact 与自动触发）
  * - Bash 执行、会话切换 / 分支 / 导出
  * - 扩展系统（ExtensionRunner）绑定、自动重试、消息队列（steer / followUp）
- * - 资源加载（skills / prompts / themes / AGENTS.md）
+ * - 资源加载（skills / prompts / themes / 2AGENTS.md.bak）
  *
  * 建议按分区标题快速定位：Event Subscription（事件流）→ Prompting（提示词）
  * → Compaction（压缩）→ Auto-Retry（重试）→ Bash Execution（Bash）
@@ -1151,7 +1151,7 @@ export class AgentSession {
 
 	// 重建“基础系统提示词”：收集当前启用工具的说明/指南 + 资源加载器拿到的
 	// 自定义 system prompt（--system-prompt）、追加内容、技能列表、项目上下文文件
-	// （AGENTS.md/CLAUDE.md），交给 buildSystemPrompt 拼装（详见 system-prompt.ts）。
+	// （2AGENTS.md.bak/CLAUDE.md），交给 buildSystemPrompt 拼装（详见 system-prompt.ts）。
 	// 结果最终存入 agent.state.systemPrompt，作为每次 LLM 请求的 system 部分。
 	private _rebuildSystemPrompt(toolNames: string[]): string {
 		const validToolNames = toolNames.filter((name) => this._toolRegistry.has(name));

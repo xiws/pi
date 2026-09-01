@@ -231,7 +231,7 @@ function createLoadedResourcesContext(): LoadedResourcesContext {
 		session: {
 			promptTemplates: [],
 			resourceLoader: {
-				getAgentsFiles: () => ({ agentsFiles: [{ path: "/repo/AGENTS.md" }], diagnostics: [] }),
+				getAgentsFiles: () => ({ agentsFiles: [{ path: "/repo/2AGENTS.md.bak" }], diagnostics: [] }),
 				getSystemPromptSource: () => undefined,
 				getAppendSystemPromptSources: () => [],
 				getSkills: () => ({ skills: [], diagnostics: [] }),
